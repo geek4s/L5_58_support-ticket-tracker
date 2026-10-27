@@ -21,8 +21,8 @@ def assign_ticket(ticket_id, agent, notify=False):
     try:
         TICKETS[ticket_id]["assignee"] = agent
         return True
-    except:
-        pass
+    except KeyError:
+        logging.warning("Cannot assign: no ticket with id %s", ticket_id)
     return False
 
 
@@ -89,7 +89,7 @@ def main():
         closeTicket(ticket_id)
     save_tickets()
     if os.environ.get("RUN_UNSAFE_DEMO") == "1":
-        eval("print('unsafe demo')")
+        print("demo mode")
 
 
 if __name__ == "__main__":

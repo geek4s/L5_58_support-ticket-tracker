@@ -117,8 +117,17 @@ def is_open(ticket_id):
 def main():
     """Run a short demonstration of the tracker."""
     logging.basicConfig(level=logging.INFO)
-    create_ticket(TicketRequest("Cannot sign in", "Password reset link fails", "alex@example.com"))
-    create_ticket(TicketRequest("Billing question", "Charged twice", "lee@example.com", priority="high"))
+    create_ticket(TicketRequest(
+        "Cannot sign in",
+        "Password reset link fails",
+        "alex@example.com",
+    ))
+    create_ticket(TicketRequest(
+        "Billing question",
+        "Charged twice",
+        "lee@example.com",
+        priority="high",
+    ))
     assign_ticket("1", "agent-01")
     update_status("1", "in_progress")
     print_ticket_report()

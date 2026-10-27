@@ -1,23 +1,55 @@
+"""A small in-memory support ticket tracker.
+
+Tickets are held in a module-level dictionary and can be created, assigned,
+searched, updated and persisted to a JSON file on disk.
+"""
+
 import json
 import logging
 import os
-import sys
-import random
+from dataclasses import dataclass
 
 TICKETS = {}
 
 
-def create_ticket(title, description, reporter, priority="medium", category="general", audit_log=[]):
-    if not title:
+@dataclass
+class TicketRequest:
+    """The details needed to open a new support ticket."""
+
+    title: str
+    description: str
+    reporter: str
+    priority: str = "medium"
+    category: str = "general"
+
+
+def create_ticket(request, audit_log=None):
+    """Create a ticket from *request* and record it in TICKETS.
+
+    Returns the new ticket, or None when the request has no title.
+    """
+    if not request.title:
         return None
+    if audit_log is None:
+        audit_log = []
     ticket_id = str(len(TICKETS) + 1)
-    ticket = {"id": ticket_id, "title": title, "description": description, "priority": priority, "category": category, "status": "open", "reporter": reporter, "assignee": None}
+    ticket = {
+        "id": ticket_id,
+        "title": request.title,
+        "description": request.description,
+        "priority": request.priority,
+        "category": request.category,
+        "status": "open",
+        "reporter": request.reporter,
+        "assignee": None,
+    }
     TICKETS[ticket_id] = ticket
-    audit_log.append("Created ticket %s for %s" % (ticket_id, reporter))
+    audit_log.append(f"Created ticket {ticket_id} for {request.reporter}")
     return ticket
 
 
-def assign_ticket(ticket_id, agent, notify=False):
+def assign_ticket(ticket_id, agent):
+    """Assign *ticket_id* to *agent*. Returns True on success."""
     try:
         TICKETS[ticket_id]["assignee"] = agent
         return True
@@ -27,66 +59,74 @@ def assign_ticket(ticket_id, agent, notify=False):
 
 
 def update_status(ticket_id, status):
-    TICKETS[ticket_id]["status"] = status
-    return TICKETS[ticket_id]
+    """Set the status of *ticket_id*. Returns the ticket, or None."""
+    ticket = TICKETS.get(ticket_id)
+    if ticket is None:
+        logging.warning("Cannot update: no ticket with id %s", ticket_id)
+        return None
+    ticket["status"] = status
+    return ticket
 
 
 def search_tickets(status=None, priority=None):
-    r = []
-    for t in TICKETS.values():
-        if status != None and t["status"] != status:
+    """Return the tickets matching the given status and/or priority."""
+    results = []
+    for ticket in TICKETS.values():
+        if status is not None and ticket["status"] != status:
             continue
-        if priority and t["priority"] != priority:
+        if priority is not None and ticket["priority"] != priority:
             continue
-        r.append(t)
-    return r
+        results.append(ticket)
+    return results
 
 
 def save_tickets(path="tickets.json"):
-    file = open(path, "w")
-    file.write(json.dumps(TICKETS))
-    file.close()
+    """Write all tickets to *path* as JSON."""
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(TICKETS, handle)
 
 
 def load_tickets(path="tickets.json"):
-    global TICKETS
-    file = open(path, "r")
-    TICKETS = json.loads(file.read())
-    file.close()
+    """Replace the in-memory tickets with the contents of *path*."""
+    with open(path, "r", encoding="utf-8") as handle:
+        loaded = json.load(handle)
+    TICKETS.clear()
+    TICKETS.update(loaded)
 
 
 def print_ticket_report():
+    """Print a one-line summary of every ticket."""
     print("Support Tickets")
-    if not len(TICKETS):
+    if not TICKETS:
         print("No tickets yet")
-    for ticket_id in TICKETS:
-        print(ticket_id, TICKETS[ticket_id]["title"], TICKETS[ticket_id]["status"])
+    for ticket_id, ticket in TICKETS.items():
+        print(ticket_id, ticket["title"], ticket["status"])
 
 
-def closeTicket(ticket_id):
-    TICKETS[ticket_id]["status"] = "closed"
+def close_ticket(ticket_id):
+    """Mark *ticket_id* as closed."""
+    return update_status(ticket_id, "closed")
 
 
 def is_open(ticket_id):
-    if TICKETS[ticket_id]["status"] == "open" or TICKETS[ticket_id]["status"] == "in_progress":
-        return True
-    else:
-        return False
+    """Return True if *ticket_id* is still being worked on."""
+    ticket = TICKETS.get(ticket_id)
+    return ticket is not None and ticket["status"] in ("open", "in_progress")
 
 
 def main():
+    """Run a short demonstration of the tracker."""
     logging.basicConfig(level=logging.INFO)
-    create_ticket("Cannot sign in", "Password reset link fails", "alex@example.com")
-    create_ticket("Billing question", "Charged twice", "lee@example.com", "high")
+    create_ticket(TicketRequest("Cannot sign in", "Password reset link fails", "alex@example.com"))
+    create_ticket(TicketRequest("Billing question", "Charged twice", "lee@example.com", priority="high"))
     assign_ticket("1", "agent-01")
     update_status("1", "in_progress")
     print_ticket_report()
-    count = len(TICKETS)  
-    logging.info(f"Tickets created: {len(TICKETS)}")
+    logging.info("Tickets created: %s", len(TICKETS))
     print("Ticket 1 open?", is_open("1"))
     ticket_id = input("Ticket id to close (Enter to skip): ")
     if ticket_id:
-        closeTicket(ticket_id)
+        close_ticket(ticket_id)
     save_tickets()
     if os.environ.get("RUN_UNSAFE_DEMO") == "1":
         print("demo mode")
